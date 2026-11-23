@@ -30,6 +30,8 @@ ActiveRecord::Schema.define do
 
   create_table :cities, force: true do |t|
     t.string :name
+    t.index :name, name: "index_cities_on_name"
+    t.index :name, name: "index_cities_on_name_copy"
   end
 
   create_table :states, force: true do |t|
@@ -58,6 +60,10 @@ ActiveRecord::Schema.define do
     t.timestamp :created_at
     t.timestamp :updated_at
     t.index :id # duplicate index
+    t.index :city_id, name: "index_users_on_city_id"
+    t.index [:city_id, :email], name: "index_users_on_city_id_and_email"
+    t.index :zip_code, include: :email, name: "index_users_on_zip_code_including_email"
+    t.index :zip_code, include: :email, name: "index_users_on_zip_code_including_email_copy"
     t.index :updated_at
     t.index :login_attempts, using: :hash
     t.index "country gist_trgm_ops", using: :gist

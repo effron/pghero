@@ -62,6 +62,7 @@ module PgHero
       @invalid_indexes = @database.invalid_indexes(indexes: @indexes)
       @invalid_constraints = @database.invalid_constraints
       @duplicate_indexes = @database.duplicate_indexes(indexes: @indexes)
+      @overlapping_indexes = @database.overlapping_indexes(indexes: @indexes)
 
       if @query_stats_enabled
         @query_stats = @database.query_stats(historical: true, start_at: 3.hours.ago)

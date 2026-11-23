@@ -17,7 +17,7 @@ module PgHero
     end
 
     def pghero_remove_index(query)
-      if query[:columns]
+      if query[:columns]&.all? { |column| /\A[a-zA-Z_]\w*\z/.match?(column) }
         columns = query[:columns].map(&:to_sym)
         columns = columns.first if columns.size == 1
       end

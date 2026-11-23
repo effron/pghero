@@ -171,17 +171,29 @@ module PgHero
       end
 
       def duplicate_indexes(indexes: nil)
-        dup_indexes = []
-
         indexes_by_table = (indexes || self.indexes).group_by { |i| [i[:schema], i[:table]] }
-        indexes_by_table.values.flatten.select { |i| i[:valid] && !i[:primary] && !i[:unique] }.each do |index|
-          covering_index = indexes_by_table[[index[:schema], index[:table]]].find { |i| i[:valid] && i[:name] != index[:name] && index_covers?(i[:columns], index[:columns]) && i[:using] == index[:using] && i[:indexprs] == index[:indexprs] && i[:indpred] == index[:indpred] }
-          if covering_index && (covering_index[:columns] != index[:columns] || index[:name] > covering_index[:name] || covering_index[:primary] || covering_index[:unique])
-            dup_indexes << {unneeded_index: index, covering_index: covering_index}
+        duplicates = indexes_by_table.values.flatten.select { |i| i[:valid] && !i[:primary] && !i[:unique] }.filter_map do |index|
+          matches = indexes_by_table[[index[:schema], index[:table]]].select do |i|
+            i[:valid] && i[:name] != index[:name] && exact_index_match?(i, index)
           end
+          covering_index =
+            matches.select { |i| i[:unique] || i[:primary] }.min_by { |i| [i[:primary] ? 0 : 1, i[:name]] } ||
+            matches.select { |i| i[:name] < index[:name] }.min_by { |i| i[:name] }
+          {unneeded_index: index, covering_index: covering_index} if covering_index
         end
+        duplicates.sort_by { |i| ui = i[:unneeded_index]; [ui[:table], ui[:columns], ui[:name]] }
+      end
 
-        dup_indexes.sort_by { |i| ui = i[:unneeded_index]; [ui[:table], ui[:columns]] }
+      def overlapping_indexes(indexes: nil)
+        indexes_by_table = (indexes || self.indexes).group_by { |i| [i[:schema], i[:table]] }
+        indexes_by_table.values.flat_map do |table_indexes|
+          table_indexes.select { |i| i[:valid] }.sort_by { |i| i[:name] }.combination(2).filter_map do |index, overlapping_index|
+            next unless indexes_overlap?(index, overlapping_index)
+            next if exact_index_match?(index, overlapping_index)
+
+            {index: index, overlapping_index: overlapping_index}
+          end
+        end.sort_by { |i| [i[:index][:table], i[:index][:name], i[:overlapping_index][:name]] }
       end
 
       # https://gist.github.com/mbanck/9976015/71888a24e464e2f772182a7eb54f15a125edf398
@@ -327,8 +339,23 @@ module PgHero
 
       protected
 
+      def exact_index_match?(index, other)
+        return false unless index[:using] == other[:using] && index[:indexprs] == other[:indexprs] && index[:indpred] == other[:indpred]
+
+        definition = index_definition_without_name(index)
+        definition && definition == index_definition_without_name(other)
+      end
+
+      def index_definition_without_name(index)
+        index[:definition]&.sub(/\ACREATE (?:UNIQUE )?INDEX (?:"(?:[^"]|"")*"|[^\s]+) ON /, "CREATE INDEX ON ")
+      end
+
+      def indexes_overlap?(index, other)
+        index_covers?(index[:columns], other[:columns]) || index_covers?(other[:columns], index[:columns])
+      end
+
       def index_covers?(indexed_columns, columns)
-        indexed_columns.first(columns.size) == columns
+        indexed_columns && columns && indexed_columns.first(columns.size) == columns
       end
     end
   end

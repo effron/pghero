@@ -8,6 +8,20 @@ class ControllerTest < ActionDispatch::IntegrationTest
     refute_match "hit rate", response.body
   end
 
+  def test_index_duplicate_migration_excludes_overlapping_indexes
+    get pg_hero.root_path
+    assert_response :success
+    assert_match "3 duplicate indexes", response.body
+    assert_match "Overlapping Indexes", response.body
+
+    migration = response.body[/<div class="migration">(.*?)<\/div>/m, 1]
+    assert_includes migration, "index_cities_on_name_copy"
+    assert_includes migration, "index_users_on_zip_code_including_email_copy"
+    assert_includes migration, "index_users_on_id"
+    refute_includes migration, "users_pkey"
+    refute_includes migration, "index_users_on_city_id"
+  end
+
   def test_index_extended
     get pg_hero.root_path(extended: true)
     assert_response :success
